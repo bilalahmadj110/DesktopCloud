@@ -1,3 +1,0 @@
-19:07:14,66 root INFO Started nurseFly.py
-19:07:16,736 root INFO Connecting SQL Server at `74.126.92.168` with username: `sa`, table: `Vivian`, database: `WebScraping` ...
-19:07:16,777 root INFO SCRIPT ERROR: No module named 'pyodbc'
