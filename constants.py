@@ -1,5 +1,5 @@
 
-IP = "192.168.18.107"
+IP = "188.60.117.196"
 API = "http://" + IP + "/android/api";
 
 SIGN_UP_API = API + "/create"

@@ -388,6 +388,8 @@ class Login(QDialog):
         self.textPassword = QLineEdit(self)
         self.buttonLogin = QPushButton('Login', self)
         
+        self.textPassword.setEchoMode(QLineEdit.Password)
+        
         # settins style on all texbox
         styles.textbox(self.textEmail, self.textPassword)
         styles.button(self.buttonLogin)
@@ -418,7 +420,7 @@ class Login(QDialog):
         
         self.setWindowTitle('Login Cloud Drive')
         
-        self.fill_all()
+        # self.fill_all()
         
         
     def receiveResponse(self, resp):
@@ -554,7 +556,7 @@ class Register(QDialog):
         # set the title of the screen
         self.setWindowTitle('Register Cloud Drive')
         
-        self.fill_all()
+        # self.fill_all()
 
     def openLink(self, link):
         self.accept()

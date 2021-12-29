@@ -61,16 +61,19 @@ class DownloadThread(QThread):
             # download file to path
             print (constants.DOWNLOAD_DIRECTORY + '/' + self.name)
             r = requests.get(self.url, headers=self.header, stream=True)
-            # create directory if not exists
-            if not os.path.exists(constants.DOWNLOAD_DIRECTORY):
-                os.makedirs(constants.DOWNLOAD_DIRECTORY)
-            # get path separator
-            sep = "/"
-            with open(constants.DOWNLOAD_DIRECTORY + sep + self.name, 'wb') as f:
-                for chunk in r.iter_content(chunk_size=1024): 
-                    if chunk: # filter out keep-alive new chunks
-                        f.write(chunk)
-            self.signal.sig.emit({"back" : ['download', self.name], 'error': False, 'message': "Success"})
+            if r.status_code == 200:
+                # create directory if not exists
+                if not os.path.exists(constants.DOWNLOAD_DIRECTORY):
+                    os.makedirs(constants.DOWNLOAD_DIRECTORY)
+                # get path separator
+                sep = "/"
+                with open(constants.DOWNLOAD_DIRECTORY + sep + self.name, 'wb') as f:
+                    for chunk in r.iter_content(chunk_size=1024): 
+                        if chunk: # filter out keep-alive new chunks
+                            f.write(chunk)
+                self.signal.sig.emit({"back" : ['download', self.name], 'error': False, 'message': "Success"})
+            else:
+                self.signal.sig.emit({"back" : ['download', self.name], "error": True, "message": 'Error: ' + str(r.status_code)})
         except Exception as e:
             self.signal.sig.emit({"back" : ['download', self.name], "error": True, "message": str(e)})
           
@@ -89,7 +92,10 @@ class UploadThread(QThread):
     def run(self):
         try:
             r = requests.post(self.url, headers=self.header, files={'file': open(self.filePath, 'rb')})
-            self.signal.sig.emit({"back" : self.back, 'error': False, 'message': r.json()})
+            if r.status_code == 200:
+                self.signal.sig.emit({"back" : self.back, "error": False, "message": r.json()})
+            else:
+                self.signal.sig.emit({"back" : self.back, "error": True, "message": 'Error: ' + str(r.status_code)})
         except Exception as e:
             self.signal.sig.emit({"back" : self.back, "error": True, "message": str(e)})
             
