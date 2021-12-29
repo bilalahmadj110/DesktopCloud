@@ -329,7 +329,6 @@ class WelcomeScreen(QDialog):
             self.uploadNetworking(filePath[0])
         else:
             return None
-    
      
     def clearList(self):
         self.listItems = []
@@ -387,6 +386,7 @@ class Login(QDialog):
         self.textEmail = QLineEdit(self)
         self.textPassword = QLineEdit(self)
         self.buttonLogin = QPushButton('Login', self)
+        self.textPassword.setEchoMode(QLineEdit.Password)
         
         # settins style on all texbox
         styles.textbox(self.textEmail, self.textPassword)
@@ -416,10 +416,7 @@ class Login(QDialog):
         self.setFont(QFont('SegoeUI', 10))
         #layout.setSizeConstraint(QLayout.SetFixedSize)
         
-        self.setWindowTitle('Login Cloud Drive')
-        
-        self.fill_all()
-        
+        self.setWindowTitle('Login Cloud Drive') 
         
     def receiveResponse(self, resp):
         self.doneLoading()
@@ -454,9 +451,6 @@ class Login(QDialog):
             main_screen = WelcomeScreen()
             stack_widget.addWidget(main_screen)
         stack_widget.setCurrentIndex(2)
-        # stack_widget.show()
-        # sys.exit(app.exec_())
-        
         
     def handleLogin(self):
         valid = self.validate()
@@ -555,8 +549,6 @@ class Register(QDialog):
         # set the title of the screen
         self.setWindowTitle('Register Cloud Drive')
         
-        self.fill_all()
-
     def openLink(self, link):
         self.accept()
         stack_widget.setCurrentIndex(0)
@@ -630,11 +622,6 @@ class Register(QDialog):
 if __name__ == '__main__':
     import sys
     app = QApplication(sys.argv)
-    
-# from login import Login
-# from register import Register
-# stacks = Stacks()
-# stacks.add(WelcomeScreen())
 
     stack_widget = QStackedWidget()
     
@@ -645,12 +632,7 @@ if __name__ == '__main__':
 
     stack_widget.addWidget(login)
     stack_widget.addWidget(register)
-    
-    # stack_widget.addWidget(Login())
-    # stack_widget.addWidget(Register())
-    # # stack_widget.addWidget(main_screen2)
-    # only call class on setting index
-    print (auth.load())
+
     if auth.load() == False:
         stack_widget.setCurrentIndex(0)
     else:
