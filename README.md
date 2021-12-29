@@ -7,6 +7,9 @@ Please install the requirements.txt using pip command:
 
 Change the `HOST/IP` Address in `constants.py` file
 
+## How to run?
+1. Make sure you've install python 2.7.18
+2. Run the `welcome.py`
 
 **Note: You can't use the Python version greater than or equal to 3.**
 
