@@ -3,7 +3,7 @@
 Supported Python:  `2.7.18`
 
 Please install the requirements.txt using pip command:
-> pip install -r requirements
+> `pip install -r requirements`
 
 Change the `HOST/IP` Address in `constants.py` file
 
