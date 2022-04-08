@@ -276,11 +276,12 @@ class WelcomeScreen(QDialog):
 
     def changePasswordNetworking(self, new, pwd, dialog, err, btn):
         btn.setEnabled(False)
-        btn.setText('Changing...')
+        btn.setText('Changing... ')
         self.setLoading("Changing password...")
+        print ({"email": self.email, "authorization": self.token, "new_password": new, "password": pwd})
         self.thread1 = ResponseThread(
             CHANGE_PASSWORD_API,
-            header={"email": self.email, "authorization": self.token, "new_password": new, "password": pwd},
+            header={"email": self.email, "authorization": self.token, "new": new, "password": pwd},
             parent=self, back=['change', dialog, err, btn]
         )
         self.thread1.start()
