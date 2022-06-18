@@ -1,10 +1,8 @@
-import re
-
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 
 import auth
-import styles
+from adminusers import AdminUsers
 from constants import *
 from listItem import Item
 from listwidgetitem import ListWidgetItem
@@ -12,15 +10,21 @@ from networking import *
 
 
 class WelcomeScreen(QDialog):
-    listItems = []
-    contentItems = []
+    flag = False
+    currentIndex = 0
+    itemsData = [{"list": [], "content": [], "explorer": None, "title": None, "to": None}]
 
-    def __init__(self, explorer=None, title=None, parent=None):
+    def __init__(self, explorer=None, title=None, parent=None, to=None, access_admin=None):
         super(WelcomeScreen, self).__init__(parent)
-        self.explorer = explorer
-        print('init', self.explorer)
 
-        self.name, self.email, self.token, self.regdate = auth.load()
+        self.title = title
+        self.explorer = explorer
+        self.to = to
+        self.access_admin = access_admin
+        self.parent = parent
+        print('init', self.explorer, title, parent, to)
+
+        self.name, self.email, self.token, self.regdate, self.is_admin, self.access = auth.load()
 
         self.hori = QHBoxLayout()
         self.titlHor = QHBoxLayout()
@@ -30,11 +34,19 @@ class WelcomeScreen(QDialog):
         self.pathLbl = QLabel("/home/bilal/Desktop/CloudDrive-desktop--main")
 
         self.backBtn = QPushButton("Back")
+
         self.logoutBtn = QPushButton("Logout")
         self.logoutBtn.setIcon(QIcon("img/logout.png"))
 
         self.changePassBtn = QPushButton("Change Password")
         self.changePassBtn.setIcon(QIcon("img/change-password.png"))
+
+        self.adminUserBtn = QPushButton()
+
+        if self.to or access_admin:
+            self.logoutBtn.hide()
+            self.changePassBtn.hide()
+            self.adminUserBtn.hide()
 
         # fix the button size
         self.backBtn.setFixedSize(QSize(70, 35))
@@ -63,6 +75,7 @@ class WelcomeScreen(QDialog):
         self.status.addWidget(self.loading)
         self.status.addWidget(self.loadinglbl)
         self.status.addStretch()
+        self.status.addWidget(self.adminUserBtn)
         self.status.addWidget(self.changePassBtn)
         self.status.addWidget(self.logoutBtn)
 
@@ -74,6 +87,16 @@ class WelcomeScreen(QDialog):
         self.reloadBtn.clicked.connect(self.handleReload)
         self.changePassBtn.clicked.connect(self.handleChangePassword)
         self.pathLbl.linkActivated.connect(self.openLink)
+        if self.is_admin is True or self.is_admin == 'true':
+            self.adminUserBtn.clicked.connect(self.handleAdminUser)
+            self.adminUserBtn.setIcon(QIcon("img/user.png"))
+            self.adminUserBtn.setText("Users List")
+        elif self.access is True or self.access == 'true' or (isinstance(self.access, int) and self.access > 0):
+            self.adminUserBtn.setText("Admin files")
+            self.adminUserBtn.setIcon(QIcon("img/icons8-file-100.png"))
+            self.adminUserBtn.clicked.connect(self.handleAccessUser)
+        else:
+            self.adminUserBtn.hide()
 
         self.listwidget = QListWidget()
         # click event
@@ -96,30 +119,70 @@ class WelcomeScreen(QDialog):
         self.vert.setContentsMargins(10, 10, 10, 10)
         self.setLayout(self.vert)
 
-        self.setWindowTitle("Welcome")
+        self.setWindowTitle("Welcome" if title is None else title)
 
         # delay for loading
         QTimer.singleShot(400, self.downloadExplorer)
 
         self.setPathTitle()
 
+        # resize window
+        self.resize(QSize(600, 800))
+
     def backClicked(self):
-        # QStackWidget total items
-        totalItems = stack_widget.count()
-        # get index
-        index = stack_widget.currentIndex()
-        if index == 2:
+        if self.currentIndex == 0 or self.flag:
             return
-        # if index is 0, then disable back button
-        if index == 3:
-            self.backBtn.setEnabled(False)
-            # remove widget at index
-        else:
-            self.backBtn.setEnabled(True)
-        index -= 1
-        stack_widget.setCurrentIndex(index)
-        stack_widget.removeWidget(stack_widget.widget(index + 1))
-        # add transition animation
+        self.currentIndex -= 1
+        self.itemsData.pop()
+
+        self.explorer = self.itemsData[self.currentIndex]['explorer']
+
+        self.itemsData[self.currentIndex]['list'] = []
+        self.listwidget.clear()
+        for data in self.itemsData[self.currentIndex]['content']:
+            if 'deleted' in data and data['deleted']:
+                continue
+            self.addToList(data, from_item=True)
+        self.setPathTitle()
+
+    def itemClicked(self, item):
+        if self.flag:
+            return
+        this_item = self.itemsData[self.currentIndex]['content'][self.itemsData[self.currentIndex]["list"].index(item)]
+        if this_item['type'] != 'DIR':
+            return
+        self.currentIndex += 1
+
+        self.explorer = this_item['path']
+        self.itemsData.append(
+            {"list": [], "content": [], "explorer": this_item['path'], "title": self.title, "to": self.to})
+        self.downloadExplorer()
+        self.setPathTitle()
+
+    def openLink(self, link):
+        if self.flag:
+            return
+        index = int(link)
+        print(index, len(self.itemsData))
+        self.currentIndex = index
+        del self.itemsData[index + 1:]
+        self.explorer = self.itemsData[self.currentIndex]['explorer']
+        self.itemsData[self.currentIndex]['list'] = []
+        self.listwidget.clear()
+        for data in self.itemsData[self.currentIndex]['content']:
+            if 'deleted' in data and data['deleted']:
+                continue
+            self.addToList(data, from_item=True)
+        self.setPathTitle()
+
+    def handleAdminUser(self):
+        # make dialog at the top of the window
+        admin_users = AdminUsers(title="Users", parent=self)
+        admin_users.show()
+
+    def handleAccessUser(self):
+        welc = WelcomeScreen(title="Admin Files", parent=self, access_admin='1')
+        welc.show()
 
     def handleChangePassword(self):
         inputDialog = QDialog()
@@ -177,24 +240,10 @@ class WelcomeScreen(QDialog):
         # show dialog
         inputDialog.exec_()
 
-    def itemClicked(self, item):
-        this_item = self.contentItems[self.listItems.index(item)]
-        if this_item['type'] != 'DIR':
-            return
-        main_screen = WelcomeScreen(explorer=this_item['path'])
-        stack_widget.addWidget(main_screen)
-        stack_widget.setCurrentIndex(stack_widget.count() - 1)
-
-    def openLink(self, link):
-        index = int(link) + 2
-        stack_widget.setCurrentIndex(index)
-        # delete all widgets greater than index
-        for i in range(stack_widget.count() - 1, index, -1):
-            stack_widget.removeWidget(stack_widget.widget(i))
-
     def setPathTitle(self):
         if self.explorer is None:
-            self.pathLbl.setText("Home Page")
+            self.pathLbl.setText("Home")
+            self.pathLbl.setFont(QFont("Arial", 11, QFont.Bold))
             return
         l = self.explorer.split('/')
         # font
@@ -206,7 +255,8 @@ class WelcomeScreen(QDialog):
                     self.pathLbl.text() + " / " + "<tag style='font-size:16px;font-family:Segoe UI; font-weight:bold;'>" + i + '</tag>')
             else:
                 self.pathLbl.setText(
-                    self.pathLbl.text() + ' / ' + "<a style='font-size:16px;font-family:Segoe UI; font-weight:bold;' href='" + str(
+                    self.pathLbl.text() + ' / ' + "<a style='font-size:16px;font-family:Segoe UI; font-weight:bold;' "
+                                                  "href='" + str(
                         index) + "'>" + i + "</a>")
         self.pathLbl.setText(self.pathLbl.text() + "</html>")
         # set font size
@@ -215,9 +265,9 @@ class WelcomeScreen(QDialog):
     def handleLogout(self):
         print("Logging out...")
         auth.clear()
-        for i in range(stack_widget.count() - 1, 1, -1):
-            stack_widget.removeWidget(stack_widget.widget(i))
-        stack_widget.setCurrentIndex(0)
+        self.accept()
+        from login import Login
+        Login(parent=self).show()
 
     def handleReload(self):
         print("Refreshing the list...")
@@ -228,7 +278,7 @@ class WelcomeScreen(QDialog):
         if name is None or len(str(name).strip()) == 0 or len(name) > 250:
             return 'Folder name is empty or too long'
         # check if name exists in the list
-        for item in self.contentItems:
+        for item in self.itemsData[self.currentIndex]['content']:
             if item['name'].strip().lower() == name.strip().lower():
                 return 'This folder name already exists, please choose another name.'
         # check if name contains any of the following characters
@@ -244,23 +294,28 @@ class WelcomeScreen(QDialog):
         elif action[0] == u'Download':
             self.downloadNetworking(action[1])
 
-    def addToList(self, data):
-        itemN = ListWidgetItem(pos=len(self.listItems))
-        widget = Item(data, pos=len(self.listItems))
+    def addToList(self, data, from_item=False):
+        itemN = ListWidgetItem(pos=len(self.itemsData[self.currentIndex]["list"]))
+        widget = Item(data, pos=len(self.itemsData[self.currentIndex]["list"]))
         widget.menuSignal.sig.connect(self.menuClicked)
         itemN.setSizeHint(widget.sizeHint())
+
         self.listwidget.addItem(itemN)
         self.listwidget.setItemWidget(itemN, widget)
 
-        self.listItems.append(itemN)  # ] = False
-        self.contentItems.append(data)
+        self.itemsData[self.currentIndex]['list'].append(itemN)
+        if not from_item:
+            self.itemsData[self.currentIndex]['content'].append(data)
+
+        # self.listItems.append(itemN)  # ] = False
+        # self.contentItems.append(data)
 
     def displayInputDialog(self, error=False):
         # red tag html
         if error:
             redTag = "<font color='red'>" + error + " </font>"
         else:
-            redTag = ''
+            redTag = ""
         text, ok = QInputDialog.getText(self, 'Input Dialog',
                                         '<html><h3>Enter the folder name:</h3>Note: A folder name can\'t contain any of the following characters: <center> /\:*?<>| </center>%s</html>' % redTag,
                                         QLineEdit.Normal, '')
@@ -278,7 +333,7 @@ class WelcomeScreen(QDialog):
         btn.setEnabled(False)
         btn.setText('Changing... ')
         self.setLoading("Changing password...")
-        print ({"email": self.email, "authorization": self.token, "new_password": new, "password": pwd})
+        print({"email": self.email, "authorization": self.token, "new_password": new, "password": pwd})
         self.thread1 = ResponseThread(
             CHANGE_PASSWORD_API,
             header={"email": self.email, "authorization": self.token, "new": new, "password": pwd},
@@ -291,31 +346,39 @@ class WelcomeScreen(QDialog):
         self.setLoading("Creating folder `" + name + "`...")
         self.thread1 = ResponseThread(
             CREATE_API + '/' + ('' if self.explorer is None else self.explorer),
-            header={"email": self.email, "authorization": self.token, "name": name.strip()},
+            header={"email": self.email, "authorization": self.token, "name": name.strip(), "to": self.to,
+                    "isadminfiles": self.access_admin},
             parent=self, back=['create', name])
         self.thread1.start()
         self.thread1.signal.sig.connect(self.receiveResponse)
 
     def deleteNetworking(self, pos):
-        self.setLoading("Deleting `" + self.contentItems[pos]['name'] + "`, please wait...")
+        self.setLoading("Deleting `" + self.itemsData[self.currentIndex]["content"][pos]['name'] + "`, please wait...")
         self.thread1 = ResponseThread(
-            DELETE_API + '/' + self.contentItems[pos]['path'],
-            header={"email": self.email, "authorization": self.token},
+            DELETE_API + '/' + self.itemsData[self.currentIndex]["content"][pos]['path'],
+            header={"email": self.email, "authorization": self.token, "to": self.to,
+                    "isadminfiles": self.access_admin},
             parent=self, back=['delete', pos])
         self.thread1.start()
         self.thread1.signal.sig.connect(self.receiveResponse)
 
     def removeFromList(self, pos, networking=True):
-        if not networking:
-            self.listwidget.takeItem(self.listwidget.row(self.listItems[pos]))
-            self.listwidget.removeItemWidget(self.listItems[pos])
-            self.setSuccess("Deleted `" + self.contentItems[pos][u'name'] + "`!")
-        else:
-            self.setLoading("Deleting `" + self.contentItems[pos][u'name'] + "`, please wait...")
-            self.deleteNetworking(pos)
+        # pos -= self.deleted
+        try:
+            if not networking:
+                self.listwidget.takeItem(self.listwidget.row(self.itemsData[self.currentIndex]["list"][pos]))
+                self.listwidget.removeItemWidget(self.itemsData[self.currentIndex]["list"][pos])
+                self.setSuccess("Deleted `" + self.itemsData[self.currentIndex]["content"][pos][u'name'] + "`!")
+                self.itemsData[self.currentIndex]["content"][pos]["deleted"] = True
+
+            else:
+                self.setLoading(
+                    "Deleting `" + self.itemsData[self.currentIndex]["content"][pos][u'name'] + "`, please wait...")
+                self.deleteNetworking(pos)
+        except Exception as e:
+            print(e)
 
     def receiveResponse(self, resp):
-        # {'data': {u'node': [{u'name': u'auth.py', u'cdate': u'2021/12/27 13:10:07', u'link': u'/explorer/auth.py', u'path': u'auth.py', u'icon': u'text', u'type': u'.PY', u'size': u'1.5264 KiB'}
         print(resp)
         self.doneLoading()
         if 'back' in resp:
@@ -330,6 +393,7 @@ class WelcomeScreen(QDialog):
                         else:
                             self.setError(resp['data']['message'])
                 self.reloadBtn.setEnabled(True)
+                self.flag = False
 
             elif resp['back'][0] == 'delete':
                 success = False
@@ -339,7 +403,8 @@ class WelcomeScreen(QDialog):
                             self.removeFromList(resp['back'][1], False)
                             success = True
                 if not success:
-                    self.setError("Error deleting `" + self.contentItems[resp['back'][1]][u'name'] + "`!")
+                    self.setError("Error deleting `" + self.itemsData[self.currentIndex]['content'][resp['back'][1]][
+                        u'name'] + "`!")
             elif resp['back'][0] == 'create':
                 success = False
                 if 'data' in resp:
@@ -393,12 +458,15 @@ class WelcomeScreen(QDialog):
             self.showErrorDialog('Something went wrong, please try again.')
 
     def downloadNetworking(self, pos):
-        print(EXPLORER_API + '/' + self.contentItems[pos]['path'])
-        self.setLoading("Downloading `" + self.contentItems[pos]['name'] + "`, please wait...")
+        print({"email": self.email, "authorization": self.token, "to": self.to})
+        print(EXPLORER_API + '/' + self.itemsData[self.currentIndex]["content"][pos]['path'])
+        self.setLoading(
+            "Downloading `" + self.itemsData[self.currentIndex]["content"][pos]['name'] + "`, please wait...")
         self.thread1 = DownloadThread(
-            EXPLORER_API + '/' + self.contentItems[pos]['path'],
-            self.contentItems[pos]['name'],
-            header={"email": self.email, "authorization": self.token},
+            EXPLORER_API + '/' + self.itemsData[self.currentIndex]["content"][pos]['path'],
+            self.itemsData[self.currentIndex]["content"][pos]['name'],
+            header={"email": self.email, "authorization": self.token, "to": self.to,
+                    "isadminfiles": self.access_admin},
             parent=self)
         self.thread1.start()
         self.thread1.signal.sig.connect(self.receiveResponse)
@@ -407,7 +475,8 @@ class WelcomeScreen(QDialog):
         self.setLoading("Uploading `" + filePath + "`, please wait...")
         self.thread1 = UploadThread(
             UPLOAD_API + '/' + ('' if self.explorer is None else self.explorer),
-            header={"email": self.email, "authorization": self.token},
+            header={"email": self.email, "authorization": self.token, "to": self.to,
+                    "isadminfiles": self.access_admin},
             parent=self,
             back=['upload', filePath])
         self.thread1.start()
@@ -421,48 +490,64 @@ class WelcomeScreen(QDialog):
             return None
 
     def clearList(self):
-        self.listItems = []
-        self.contentItems = []
+        # self.listItems = []
+        # self.contentItems = []
         self.listwidget.clear()
+        self.itemsData[self.currentIndex]["list"].clear()
+        self.itemsData[self.currentIndex]["content"].clear()
 
     def showErrorDialog(self, error):
         self.setError(error)
         QMessageBox.information(self, 'Error', error, QMessageBox.Ok)
 
     def downloadExplorer(self):
+        if self.flag:
+            return
         print(EXPLORER_API + '' if self.explorer is None else self.explorer)
         self.reloadBtn.setEnabled(False)
+        self.flag = True
         # get auth token
         try:
-            _, email, token, __ = auth.load()
+            _, email, token, __, ___, ____ = auth.load()
             print(self.setLoading(
-                "Downloading " + ('HomePage' if self.explorer is None else ("`" + self.explorer + "`")) + "..."))
+                "Downloading " + ('Home' if self.explorer is None else ("`" + self.explorer + "`")) + "..."))
             self.setLoading(
-                "Downloading " + ('HomePage' if self.explorer is None else ("`" + self.explorer + "`")) + "...")
+                "Downloading " + ('Home' if self.explorer is None else ("`" + self.explorer + "`")) + "...")
             self.thread1 = ResponseThread(
                 EXPLORER_API + "/" + ('' if self.explorer is None else self.explorer),
-                header={"email": email, "authorization": token},
+                header={"email": email, "authorization": token, "to": self.to,
+                        "isadminfiles": self.access_admin},
                 parent=self)
             self.thread1.start()
             self.thread1.signal.sig.connect(self.receiveResponse)
 
-        except:
-            self.showErrorDialog('Something went wrong, please try logging in again.')
+        except Exception as e:
+            self.showErrorDialog('Something went wrong, please try logging in again.\nError: ' + str(e))
             self.reloadBtn.setEnabled(True)
+            self.flag = False
 
     def setLoading(self, text):
+        text = self.shortLongText(text)
         self.loadinglbl.setText(text)
         self.loadinglbl.show()
         self.loading.show()
 
     def setError(self, text):
-        # red html text   
+        # red html text
+        text = self.shortLongText(text)
         self.loadinglbl.setText("<html><font color='red'>" + text + "</font></html>")
         self.loadinglbl.show()
         self.loading.hide()
 
+    def shortLongText(self, text):
+        if len(text) > 20:
+            return text[:20] + "..."
+        else:
+            return text
+
     def setSuccess(self, text):
         # green html text
+        text = self.shortLongText(text)
         self.loadinglbl.setText("<html><font color='green'>" + text + "</font></html>")
         self.loadinglbl.show()
         self.loading.hide()
@@ -472,284 +557,16 @@ class WelcomeScreen(QDialog):
         self.loading.hide()
 
 
-class Login(QDialog):
-    def __init__(self, parent=None):
-        super(Login, self).__init__(parent)
-        self.textEmail = QLineEdit(self)
-        self.textPassword = QLineEdit(self)
-        self.buttonLogin = QPushButton('Login', self)
-
-        self.textPassword.setEchoMode(QLineEdit.Password)
-
-        # settins style on all texbox
-        styles.textbox(self.textEmail, self.textPassword)
-        styles.button(self.buttonLogin)
-
-        layout = QVBoxLayout(self)
-        layout.addWidget(QLabel('Email:'))
-        layout.addWidget(self.textEmail)
-        layout.addWidget(QLabel('Password:'))
-        layout.addWidget(self.textPassword)
-        layout.addWidget(self.buttonLogin)
-        # Don't have an account, register link label
-        register_link = QLabel('Don\'t have an account yet? <a href="http://www.example.com"><b>Create</b></a> it.')
-        # match width to the parent widget
-        register_link.setAlignment(Qt.AlignHCenter)
-        layout.addWidget(register_link)
-
-        # signal to open the link
-        register_link.linkActivated.connect(self.openLink)
-
-        self.buttonLogin.clicked.connect(self.handleLogin)
-
-        # resize the layout width, height
-        # layout.resize(400, 100)
-        self.setFixedSize(450, 220)
-        self.setFont(QFont('SegoeUI', 10))
-        # layout.setSizeConstraint(QLayout.SetFixedSize)
-
-        self.setWindowTitle('Login Cloud Drive')
-
-        # self.fill_all()
-
-    def receiveResponse(self, resp):
-        self.doneLoading()
-        print("Response: " + str(resp))
-        if 'data' in resp:
-            if 'message' in resp['data']:
-                if resp['data']['message'] == u'Login successful':
-                    # login success, now save the token
-                    print("Saving token...")
-                    auth.save(resp['data']['name'], resp['data']['regdate'], resp['data']['token'],
-                              resp['data']['email'])
-                    self.openWindow()
-                else:
-                    QMessageBox.information(self, 'Acount creation failed', resp['data']['message'])
-            else:
-                QMessageBox.information(self, 'Acount creation failed',
-                                        'An error occurred, response was invalid, please contact developer.')
-        elif 'message' in resp:
-            QMessageBox.information(self, 'Acount creation failed', resp['message'])
-        else:
-            QMessageBox.information(self, 'Acount creation failed', 'Unknown error occured, please try again later.')
-
-    def openLink(self, link):
-        self.accept()
-        stack_widget.setCurrentIndex(1)
-
-    def openWindow(self):
-        self.accept()
-        try:
-            stack_widget.addWidget(main_screen)
-        except NameError as e:
-            main_screen = WelcomeScreen()
-            stack_widget.addWidget(main_screen)
-        stack_widget.setCurrentIndex(2)
-        # stack_widget.show()
-        # sys.exit(app.exec_())
-
-    def handleLogin(self):
-        valid = self.validate()
-
-        if valid == True:
-            self.setLoading()
-            self.thread1 = ResponseThread(
-                SIGN_IN_API,
-                form_data={"email": self.textEmail.text(), "password": self.textPassword.text()}, parent=self)
-            self.thread1.start()
-            self.thread1.signal.sig.connect(self.receiveResponse)
-        else:
-            # show a message box
-            QMessageBox.information(self, 'Error', valid)
-            return
-
-    def validate_email(self, email):
-        if len(email) > 7:
-            if re.match("^.+\\@(\\[?)[a-zA-Z0-9\\-\\.]+\\.([a-zA-Z]{2,3}|[0-9]{1,3})(\\]?)$", email) != None:
-                return True
-        return False
-
-    def validate(self):
-        if self.textEmail.text() == '' or self.validate_email(self.textEmail.text()) == False:
-            return 'Please enter a valid email address'
-        if self.textPassword.text() == '' or len(self.textPassword.text()) < 6:
-            return 'Password is required (min 6 characters)'
-        return True
-
-    def setLoading(self):
-        self.buttonLogin.setText('Signing in...')
-        self.buttonLogin.setEnabled(False)
-
-    def doneLoading(self):
-        self.buttonLogin.setText('Login')
-        self.buttonLogin.setEnabled(True)
-
-    def fill_all(self):
-        self.textEmail.setText('john@gmail.com')
-        self.textPassword.setText('password.')
-
-
-class Register(QDialog):
-    def __init__(self, parent=None):
-        super(Register, self).__init__(parent)
-
-        # textboxes
-        self.textFullName = QLineEdit(self)
-        self.textEmail = QLineEdit(self)
-        self.textPassword = QLineEdit(self)
-
-        # buttons
-        self.buttonRegister = QPushButton('Let\'s Create', self)
-        # set upper case
-        styles.button(self.buttonRegister)
-        # self.setFont(QFont('SegoeUI', 10))
-        register_link = QLabel('Already have an account? <a href="http://www.example.com"><b>Login</b></a>')
-
-        # set the password to be hidden
-        self.textPassword.setEchoMode(QLineEdit.Password)
-        self.textConfirmPassword = QLineEdit(self)
-        self.textConfirmPassword.setEchoMode(QLineEdit.Password)
-
-        styles.textbox(self.textFullName, self.textEmail, self.textPassword, self.textConfirmPassword)
-
-        register_link.setAlignment(Qt.AlignHCenter)
-
-        # listeners
-        self.buttonRegister.clicked.connect(self.handleRegister)
-        register_link.linkActivated.connect(self.openLink)
-
-        # main layout
-        layout = QVBoxLayout(self)
-
-        layout.addWidget(QLabel('Full name'))
-        layout.addWidget(self.textFullName)
-        layout.addWidget(QLabel('Email'))
-        layout.addWidget(self.textEmail)
-        layout.addWidget(QLabel('Password'))
-        layout.addWidget(self.textPassword)
-        layout.addWidget(QLabel('Confirm Password'))
-        layout.addWidget(self.textConfirmPassword)
-
-        layout.addWidget(self.buttonRegister)
-
-        layout.addWidget(register_link)
-        # signal to open the link
-
-        # resize the layout width, height
-        # layout.resize(400, 100)
-        self.setFixedSize(450, 350)
-        self.setFont(QFont('SegoeUI', 10))
-
-        # set the title of the screen
-        self.setWindowTitle('Register Cloud Drive')
-
-        # self.fill_all()
-
-    def openLink(self, link):
-        self.accept()
-        stack_widget.setCurrentIndex(0)
-
-    def receiveResponse(self, resp):
-        self.doneLoading()
-        print("Response: " + str(resp))
-        if 'data' in resp:
-            if 'message' in resp['data']:
-                if resp['data']['message'] == u'Account created':
-                    reply = QMessageBox.question(self, 'Account created',
-                                                 'Your account has been created. Would you like to login now?',
-                                                 QMessageBox.Yes, QMessageBox.No)
-                    if reply == QMessageBox.Yes:
-                        self.openLink('http://www.example.com')
-                else:
-                    QMessageBox.information(self, 'Acount creation failed', resp['data']['message'])
-            else:
-                QMessageBox.information(self, 'Acount creation failed',
-                                        'An error occurred, response was invalid, please contact developer.')
-        elif 'message' in resp:
-            QMessageBox.information(self, 'Acount creation failed', resp['message'])
-        else:
-            QMessageBox.information(self, 'Acount creation failed', 'Unknown error occured, please try again later.')
-
-    def fill_all(self):
-        self.textFullName.setText('John Doe')
-        self.textEmail.setText('john@gmail.com')
-        self.textPassword.setText('password')
-        self.textConfirmPassword.setText('password')
-
-    def handleRegister(self):
-        valid = self.validate()
-        if valid == True:
-            self.setLoading()
-            self.thread1 = ResponseThread(
-                SIGN_UP_API,
-                form_data={"email": self.textEmail.text(), "password": self.textPassword.text(),
-                           "name": self.textFullName.text()}, parent=self)
-            self.thread1.start()
-            self.thread1.signal.sig.connect(self.receiveResponse)
-        else:
-            # show a message box
-            QMessageBox.information(self, 'Error', valid)
-            return
-
-    def setLoading(self):
-        self.buttonRegister.setEnabled(False)
-        self.buttonRegister.setText('Creating account...')
-        # increasing the number of dots while loading
-
-    def doneLoading(self):
-        self.buttonRegister.setEnabled(True)
-        self.buttonRegister.setText('Let\'s Create')
-
-    def validate_email(self, email):
-        if len(email) > 7:
-            if re.match("^.+\\@(\\[?)[a-zA-Z0-9\\-\\.]+\\.([a-zA-Z]{2,3}|[0-9]{1,3})(\\]?)$", email) != None:
-                return True
-        return False
-
-    def validate(self):
-        if self.textFullName.text().strip() == '':
-            return 'Please enter your full name'
-        if self.textEmail.text() == '' or self.validate_email(self.textEmail.text()) == False:
-            return 'Please enter a valid email address'
-        if self.textPassword.text() == '' or len(self.textPassword.text()) < 6:
-            return 'Password is required (min 6 characters)'
-        if self.textConfirmPassword.text() == '':
-            return 'Please confirm your password'
-        if self.textPassword.text() != self.textConfirmPassword.text():
-            return 'Passwords do not match'
-        return True
-
-
 if __name__ == '__main__':
     import sys
 
     app = QApplication(sys.argv)
+    if not auth.load():
+        from login import Login
 
-    # from login import Login
-    # from register import Register
-    # stacks = Stacks()
-    # stacks.add(WelcomeScreen())
-
-    stack_widget = QStackedWidget()
-
-    login = Login()
-    register = Register()
-    # main_screen2 = WelcomeScreen()
-    # main_screen.show()
-
-    stack_widget.addWidget(login)
-    stack_widget.addWidget(register)
-
-    # stack_widget.addWidget(Login())
-    # stack_widget.addWidget(Register())
-    # # stack_widget.addWidget(main_screen2)
-    # only call class on setting index
-    print(auth.load())
-    if auth.load() == False:
-        stack_widget.setCurrentIndex(0)
+        login = Login()
+        login.show()
     else:
         main_screen = WelcomeScreen()
-        stack_widget.addWidget(main_screen)
-    stack_widget.setCurrentIndex(2)
-    stack_widget.show()
+        main_screen.show()
     sys.exit(app.exec_())

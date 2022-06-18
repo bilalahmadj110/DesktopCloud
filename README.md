@@ -8,7 +8,7 @@ Please install the requirements.txt using pip command:
 Change the `HOST/IP` Address in `constants.py` file
 
 ## How to run?
-1. Make sure you've install python `>=3.5`
+1. Make sure you've python `>=3.5` installed.
 2. Run the `welcome.py`
 
 
